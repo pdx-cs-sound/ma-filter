@@ -1,5 +1,5 @@
 import argparse, numpy as np, sounddevice, struct, sys, wave
-from scipy import fft
+from scipy import fft, signal
 
 ap = argparse.ArgumentParser()
 ap.add_argument(
@@ -11,6 +11,12 @@ ap.add_argument(
     help="block size in frames",
     type=int,
     default = 8,
+)
+ap.add_argument(
+    "-a", "--algorithm",
+    help="convolution algorithm",
+    choices=["python", "convolve", "convolve-direct", "convolve-fft"],
+    default="convolve",
 )
 ap.add_argument(
     "wavfile",
@@ -73,14 +79,38 @@ def play(samples):
     stream.stop()
     stream.close()
 
-outsamples = np.append(samples, np.array([0.0] * (blocksize - 1)))
-for i in range(1, blocksize):
-    outsamples += np.concatenate((
-        np.array([0.0] * i),
-        samples,
-        np.array([0.0] * (blocksize - i - 1)),
-    ))
-outsamples /= blocksize
+# Filter with blocksize 3
+#     a b c d e 0 0
+#     0 a b c d e 0
+#   + 0 0 a b c d e
+#   ---------------
+#     a/3 (a+b)/3 (a+b+c)/3 ...
+def filter_python(samples):
+    outsamples = np.append(samples, np.array([0.0] * (blocksize - 1)))
+    for i in range(1, blocksize):
+        outsamples += np.concatenate((
+            np.array([0.0] * i),
+            samples,
+            np.array([0.0] * (blocksize - i - 1)),
+        ))
+    outsamples /= blocksize
+    return outsamples
+
+def filter_convolve(samples, method="auto"):
+    window = np.array([1.0 / blocksize] * blocksize)
+    outsamples = signal.convolve(samples, window, method=method)
+    return outsamples
+
+if args.algorithm == "python":
+    outsamples = filter_python(samples)
+elif args.algorithm == "convolve-direct":
+    outsamples = filter_convolve(samples, method="direct")
+elif args.algorithm == "convolve-fft":
+    outsamples = filter_convolve(samples, method="fft")
+elif args.algorithm == "convolve":
+    outsamples = filter_convolve(samples)
+else:
+    assert False
 
 outsamples = np.clip(outsamples, -0.95, 0.95)
 
