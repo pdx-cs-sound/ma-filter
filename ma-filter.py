@@ -19,10 +19,20 @@ ap.add_argument(
     default="convolve",
 )
 ap.add_argument(
+    "-p", "--play",
+    help="play when generating output",
+    action="store_true",
+)
+ap.add_argument(
     "wavfile",
     help="wav input file",
 )
 args = ap.parse_args()
+
+if args.outfile is not None:
+    play_anyway = args.play
+else:
+    play_anyway = True
 
 blocksize = args.blocksize
 
@@ -43,6 +53,9 @@ params, samples, sample_rate = read(args.wavfile)
 # Write a wave file.
 def write(f, samples, params):
     nframes = len(samples)
+    params = list(params)
+    params[3] = nframes
+    params = tuple(params)
     framedata = [int(s * (1 << 15)) for s in samples]
     frames = struct.pack(f"<{nframes}h", *framedata)
     with wave.open(f, "wb") as w:
@@ -117,4 +130,5 @@ outsamples = np.clip(outsamples, -0.95, 0.95)
 # Play the result.
 if args.outfile:
     write(args.outfile, outsamples, params)
-play(outsamples)
+if play_anyway:
+    play(outsamples)
